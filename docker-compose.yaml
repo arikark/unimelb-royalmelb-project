@@ -1,0 +1,81 @@
+version: "3"
+
+services:
+  db:
+    image: mysql:8.0.22
+    restart: always
+    container_name: db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: "aa_audit"
+      MYSQL_ROOT_PASSWORD: "root_password"
+    volumes:
+      # sql scripts will be run automatically only when volume is empty (ie initial startup)
+      - ./mysql-db/sql-scripts:/docker-entrypoint-initdb.d/:ro
+      - db_data:/var/lib/mysql
+    networks:
+      - backend_network
+      - jupyterhub_network
+    command: --default-authentication-plugin=mysql_native_password
+
+  webapp-backend:
+    build: ./webapp-backend
+    restart: always
+    container_name: webapp-backend
+    volumes:
+      - ./webapp-backend/app:/flaskr
+    ports:
+      - "5000:5000"
+    networks:
+      - frontend_network
+      - backend_network
+      - jupyterhub_network
+    depends_on:
+      - db
+      - jupyterhub
+
+  webapp-frontend:
+    build: ./webapp-frontend
+    restart: always
+    container_name: webapp-frontend
+    image: webapp-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - frontend_network
+      # - backend_network
+      # - jupyterhub_network
+    environment:
+      REACT_APP_API_DNS: "localhost:5000"
+    depends_on:
+      - webapp-backend
+      - jupyterhub
+
+  jupyterhub:
+    build: ./jupyterhub
+    image: jupyterhub
+    restart: always
+    container_name: jupyterhub
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - jupyterhub_data:/srv/jupyterhub
+    ports:
+      - "8000:8000"
+    networks:
+      - jupyterhub_network
+    environment:
+      DOCKER_JUPYTER_IMAGE: 'custom-lab'
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+  jupyterhub_data:
+
+networks:
+  frontend_network:
+  backend_network:
+  jupyterhub_network:
+    driver: bridge
+    name: jupyterhub_network
